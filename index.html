@@ -896,14 +896,38 @@ function OrdersTab(_ref5) {
     setPending([]);
   };
   var exportCRM = function exportCRM(order) {
-    var rows = order.lines.map(function (l) {
-      var _getLot;
-      return {
-        CODIGO: l.externalCode,
-        CODIGO_LAROME: l.laromCode || "",
-        CANTIDAD: l.qty,
-        LOTE: ((_getLot = getLot(l.lotId)) === null || _getLot === void 0 ? void 0 : _getLot.lot) || ""
-      };
+    var rows = [];
+    order.lines.forEach(function (l) {
+      var m = getMap(l.externalCode);
+      var precio = (m === null || m === void 0 ? void 0 : m.precio) || 0;
+      var assignments = l.lotAssignments && l.lotAssignments.length > 0 ? l.lotAssignments : [{
+        lotId: l.lotId,
+        qty: l.qty
+      }];
+      if (isVenta(l.externalCode) && assignments.filter(function (a) {
+        return a.lotId;
+      }).length > 0) {
+        assignments.filter(function (a) {
+          return a.lotId;
+        }).forEach(function (a) {
+          var _getLot;
+          rows.push({
+            "CODIGO LAROME": l.laromCode || "",
+            "CANTIDAD": Number(a.qty) || l.qty,
+            "PRECIO": precio,
+            "LOTE": ((_getLot = getLot(a.lotId)) === null || _getLot === void 0 ? void 0 : _getLot.lot) || "",
+            "N/PEDIDO QUALIFARMA": order.ref || ""
+          });
+        });
+      } else {
+        rows.push({
+          "CODIGO LAROME": l.laromCode || "",
+          "CANTIDAD": l.qty,
+          "PRECIO": precio,
+          "LOTE": "",
+          "N/PEDIDO QUALIFARMA": order.ref || ""
+        });
+      }
     });
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pedido");
@@ -1126,7 +1150,7 @@ function OrdersTab(_ref5) {
   }), " Cancelar")));
 }
 
-// ─── Order card con edición de lote inline ────────────────────────────────────
+// ─── Order card con múltiples lotes por línea ───────────────────────────────
 function OrderCard(_ref6) {
   var order = _ref6.order,
     getLot = _ref6.getLot,
@@ -1142,7 +1166,17 @@ function OrderCard(_ref6) {
     _useState26 = _slicedToArray(_useState25, 2),
     editing = _useState26[0],
     setEditing = _useState26[1];
-  var _useState27 = useState(order.lines),
+  // lines with lotAssignments: [{lotId, qty}]
+  var _useState27 = useState(function () {
+      return order.lines.map(function (l) {
+        return _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments || (l.lotId ? [{
+            lotId: l.lotId,
+            qty: l.qty
+          }] : [])
+        });
+      });
+    }),
     _useState28 = _slicedToArray(_useState27, 2),
     lines = _useState28[0],
     setLines = _useState28[1];
@@ -1150,17 +1184,66 @@ function OrderCard(_ref6) {
     return isVenta(l.externalCode);
   });
   var sinLote = ventaLines.filter(function (l) {
-    return !l.lotId;
+    return !l.lotId && !(l.lotAssignments && l.lotAssignments.length > 0);
   }).length;
+  var addAssignment = function addAssignment(lineIdx) {
+    setLines(function (ls) {
+      return ls.map(function (l, i) {
+        return i === lineIdx ? _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: [].concat(_toConsumableArray(l.lotAssignments), [{
+            lotId: "",
+            qty: ""
+          }])
+        }) : l;
+      });
+    });
+  };
+  var removeAssignment = function removeAssignment(lineIdx, aIdx) {
+    setLines(function (ls) {
+      return ls.map(function (l, i) {
+        return i === lineIdx ? _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments.filter(function (_, j) {
+            return j !== aIdx;
+          })
+        }) : l;
+      });
+    });
+  };
+  var updateAssignment = function updateAssignment(lineIdx, aIdx, field, value) {
+    setLines(function (ls) {
+      return ls.map(function (l, i) {
+        return i === lineIdx ? _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments.map(function (a, j) {
+            return j === aIdx ? _objectSpread(_objectSpread({}, a), {}, _defineProperty({}, field, value)) : a;
+          })
+        }) : l;
+      });
+    });
+  };
   var saveLines = function saveLines() {
+    // Flatten: keep lotId as first assignment for backward compat, store all in lotAssignments
+    var saved = lines.map(function (l) {
+      var _l$lotAssignments;
+      return _objectSpread(_objectSpread({}, l), {}, {
+        lotId: ((_l$lotAssignments = l.lotAssignments) === null || _l$lotAssignments === void 0 || (_l$lotAssignments = _l$lotAssignments[0]) === null || _l$lotAssignments === void 0 ? void 0 : _l$lotAssignments.lotId) || null,
+        lotAssignments: l.lotAssignments.filter(function (a) {
+          return a.lotId;
+        })
+      });
+    });
     upO(function (orders) {
       return orders.map(function (o) {
         return o.id === order.id ? _objectSpread(_objectSpread({}, o), {}, {
-          lines: lines
+          lines: saved
         }) : o;
       });
     });
     setEditing(false);
+  };
+  var totalAssigned = function totalAssigned(line) {
+    return line.lotAssignments.reduce(function (a, x) {
+      return a + (Number(x.qty) || 0);
+    }, 0);
   };
   return /*#__PURE__*/React.createElement("div", {
     style: s.card
@@ -1239,24 +1322,25 @@ function OrderCard(_ref6) {
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 8,
+      gap: 10,
       marginTop: 4
     }
   }, lines.map(function (l, i) {
-    var lot = getLot(l.lotId);
     var venta = isVenta(l.externalCode);
+    var total = totalAssigned(l);
+    var remaining = l.qty - total;
     return /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
         borderTop: "1px solid ".concat(BORDER),
-        paddingTop: 8
+        paddingTop: 10
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        marginBottom: editing && venta ? 6 : 0
+        marginBottom: 6
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: _objectSpread(_objectSpread({}, s.extB), {}, {
@@ -1279,33 +1363,97 @@ function OrderCard(_ref6) {
         fontWeight: 700,
         fontSize: 13
       }
-    }, l.qty, " uds"), venta && !editing && (lot ? /*#__PURE__*/React.createElement("span", {
-      style: s.lotBsm
-    }, lot.lot) : /*#__PURE__*/React.createElement("span", {
+    }, l.qty, " uds")), venta && editing && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginTop: 4
+      }
+    }, l.lotAssignments.map(function (a, j) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: j,
+        style: {
+          display: "flex",
+          gap: 6,
+          alignItems: "center"
+        }
+      }, /*#__PURE__*/React.createElement("select", {
+        style: _objectSpread(_objectSpread({}, s.inpsm), {}, {
+          flex: 2
+        }),
+        value: a.lotId,
+        onChange: function onChange(e) {
+          return updateAssignment(i, j, "lotId", e.target.value);
+        }
+      }, /*#__PURE__*/React.createElement("option", {
+        value: ""
+      }, "\u2014 Lote \u2014"), lots.map(function (lt) {
+        return /*#__PURE__*/React.createElement("option", {
+          key: lt.id,
+          value: lt.id
+        }, "Lote ", lt.lot);
+      })), /*#__PURE__*/React.createElement("input", {
+        style: _objectSpread(_objectSpread({}, s.inpsm), {}, {
+          flex: 1
+        }),
+        type: "number",
+        min: "1",
+        placeholder: "Uds",
+        value: a.qty,
+        onChange: function onChange(e) {
+          return updateAssignment(i, j, "qty", e.target.value);
+        }
+      }), /*#__PURE__*/React.createElement("button", {
+        style: _objectSpread(_objectSpread({}, s.btnd), {}, {
+          padding: 4
+        }),
+        onClick: function onClick() {
+          return removeAssignment(i, j);
+        }
+      }, /*#__PURE__*/React.createElement(Icon, {
+        name: "x",
+        size: 13
+      })));
+    }), l.lotAssignments.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: remaining === 0 ? GREEN : remaining < 0 ? DANGER : AMBER,
+        fontWeight: 600
+      }
+    }, remaining === 0 ? "✓ Completo" : "Faltan ".concat(remaining, " uds por asignar"), remaining < 0 ? " (".concat(Math.abs(remaining), " de m\xE1s)") : ""), /*#__PURE__*/React.createElement("button", {
+      style: _objectSpread(_objectSpread({}, s.btng), {}, {
+        fontSize: 12,
+        padding: "5px 10px",
+        alignSelf: "flex-start"
+      }),
+      onClick: function onClick() {
+        return addAssignment(i);
+      }
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "plus",
+      size: 13
+    }), " A\xF1adir lote")), venta && !editing && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap",
+        marginTop: 2
+      }
+    }, l.lotAssignments && l.lotAssignments.length > 0 ? l.lotAssignments.map(function (a, j) {
+      var lt = getLot(a.lotId);
+      return lt ? /*#__PURE__*/React.createElement("span", {
+        key: j,
+        style: _objectSpread(_objectSpread({}, s.lotBsm), {}, {
+          fontSize: 11
+        })
+      }, lt.lot, a.qty ? " \xB7 ".concat(a.qty, " uds") : "") : null;
+    }) : /*#__PURE__*/React.createElement("span", {
       style: {
         color: AMBER,
         fontSize: 11
       }
-    }, "sin lote"))), editing && venta && /*#__PURE__*/React.createElement("select", {
-      style: s.inpsm,
-      value: l.lotId || "",
-      onChange: function onChange(e) {
-        return setLines(function (ls) {
-          return ls.map(function (x, j) {
-            return j === i ? _objectSpread(_objectSpread({}, x), {}, {
-              lotId: e.target.value
-            }) : x;
-          });
-        });
-      }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: ""
-    }, "\u2014 Sin lote \u2014"), lots.map(function (lt) {
-      return /*#__PURE__*/React.createElement("option", {
-        key: lt.id,
-        value: lt.id
-      }, "Lote ", lt.lot, " \xB7 ", lt.qty, " uds \xB7 ", lt.date);
-    })));
+    }, "sin lote")));
   }), editing && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -1321,7 +1469,11 @@ function OrderCard(_ref6) {
   }), " Guardar"), /*#__PURE__*/React.createElement("button", {
     style: s.btng,
     onClick: function onClick() {
-      setLines(order.lines);
+      setLines(order.lines.map(function (l) {
+        return _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments || []
+        });
+      }));
       setEditing(false);
     }
   }, /*#__PURE__*/React.createElement(Icon, {
@@ -1374,7 +1526,8 @@ function MappingTab(_ref7) {
           externalCode: (r.codigo || r.codigoqualifarma || r.codice || r.codigoexterno || "").toString().trim(),
           laromCode: (r.codigolarome || r.larome || r.codlarome || r.codigointerno || r.codlarome || "").toString().trim(),
           name: (r.nombre || r.name || r.descrizione || r.descripcion || r.nombreCorto || "").trim(),
-          unitsPerBox: Number(r.unidadescaja || r.udscaja || r.unidadesxcaja || r.unidcaja || 0) || 0
+          unitsPerBox: Number(r.unidadescaja || r.udscaja || r.unidadesxcaja || r.unidcaja || 0) || 0,
+          precio: Number(r.precio || r.price || r.pvp || 0) || 0
         };
       }).filter(function (r) {
         return r.externalCode && r.laromCode && r.laromCode !== "xxxxxx";
@@ -1540,7 +1693,11 @@ function MappingTab(_ref7) {
       }
     }, m.name), m.unitsPerBox > 0 && /*#__PURE__*/React.createElement("span", {
       style: s.boxB
-    }, m.unitsPerBox, "/cj"), /*#__PURE__*/React.createElement("button", {
+    }, m.unitsPerBox, "/cj"), m.precio > 0 && /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, s.boxB), {}, {
+        color: GREEN
+      })
+    }, "\u20AC", m.precio), /*#__PURE__*/React.createElement("button", {
       style: _objectSpread(_objectSpread({}, s.btnd), {}, {
         padding: 4
       }),
