@@ -7,16 +7,16 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="LAROME Lotes"/>
   <meta name="description" content="Gestión de lotes y pedidos LAROME Perfumes"/>
-  <meta name="theme-color" content="#0d1b2a"/>
+  <meta name="theme-color" content="#060f18"/>
   <title>LAROME Lotes</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="apple-touch-icon" href="icon-192.png"/>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html,body,#root{height:100%;background:#0d1b2a}
+    html,body,#root{height:100%;background:#060f18}
     body{font-family:'DM Sans','Segoe UI',sans-serif;-webkit-tap-highlight-color:transparent}
-    select option{background:#132233;color:#e2eaf4}
-    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.6)}
+    select option{background:#0e1e2e;color:#f0f6ff}
+    input[type=date]::-webkit-calendar-picker-indicator{filter:invert(0.7)}
   </style>
 </head>
 <body>
@@ -366,9 +366,9 @@ var _React = React,
   useState = _React.useState,
   useCallback = _React.useCallback;
 var KEYS = {
-  lots: "lrm_lots2",
-  orders: "lrm_orders2",
-  mapping: "lrm_mapping2"
+  orders: "lrm_orders3",
+  mapping: "lrm_mapping3",
+  photos: "lrm_photos3"
 };
 var lsGet = function lsGet(k) {
   try {
@@ -386,6 +386,30 @@ var lsSet = function lsSet(k, v) {
 var uid = function uid() {
   return Math.random().toString(36).slice(2, 9);
 };
+
+// Photos stored as {orderId: [{id,data,date}]}
+var getPhotos = function getPhotos() {
+  return lsGet(KEYS.photos) || {};
+};
+var savePhotos = function savePhotos(p) {
+  return lsSet(KEYS.photos, p);
+};
+var cleanOldPhotos = function cleanOldPhotos() {
+  var photos = getPhotos();
+  var cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 2);
+  var changed = false;
+  Object.keys(photos).forEach(function (oid) {
+    var filtered = photos[oid].filter(function (p) {
+      return new Date(p.date) > cutoff;
+    });
+    if (filtered.length !== photos[oid].length) {
+      photos[oid] = filtered;
+      changed = true;
+    }
+  });
+  if (changed) savePhotos(photos);
+};
 var today = function today() {
   return new Date().toISOString().slice(0, 10);
 };
@@ -401,23 +425,30 @@ var boxError = function boxError(upb, qty) {
   if (n <= 0) return null;
   if (n % upb !== 0) {
     var p = Math.floor(n / upb) * upb;
-    return "M\xFAltiplo de ".concat(upb, "/caja \u2014 \xBF").concat(p > 0 ? p + " o " : "").concat(p + upb, "?");
+    return {
+      msg: "M\xFAltiplo de ".concat(upb, "/caja"),
+      suggestions: p > 0 ? [p, p + upb] : [p + upb]
+    };
   }
   return null;
+};
+
+// Category detection from laromCode prefix
+var getCategory = function getCategory(laromCode) {
+  var c = String(laromCode || "");
+  if (c.startsWith("111") || c.startsWith("112")) return "equivalencia";
+  if (c.startsWith("411") || c.startsWith("412")) return "nicho";
+  return "otro";
+};
+var get100ml = function get100ml(laromCode) {
+  var c = String(laromCode || "");
+  return c.startsWith("111") || c.startsWith("411");
 };
 var Icon = function Icon(_ref) {
   var name = _ref.name,
     _ref$size = _ref.size,
     size = _ref$size === void 0 ? 18 : _ref$size;
   var d = {
-    tag: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
-      d: "M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
-    }), /*#__PURE__*/React.createElement("line", {
-      x1: "7",
-      y1: "7",
-      x2: "7.01",
-      y2: "7"
-    })),
     cart: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("circle", {
       cx: "9",
       cy: "21",
@@ -522,10 +553,24 @@ var Icon = function Icon(_ref) {
     }), /*#__PURE__*/React.createElement("path", {
       d: "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
     })),
-    edit: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
-      d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+    box: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("rect", {
+      x: "2",
+      y: "7",
+      width: "20",
+      height: "14",
+      rx: "2"
     }), /*#__PURE__*/React.createElement("path", {
-      d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+      d: "M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "12",
+      y1: "12",
+      x2: "12",
+      y2: "17"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "9.5",
+      y1: "14.5",
+      x2: "14.5",
+      y2: "14.5"
     }))
   };
   return /*#__PURE__*/React.createElement("svg", {
@@ -577,32 +622,18 @@ function App() {
     setTab = _useState2[1];
   var _useState3 = useState(function () {
       var _lsGet;
-      return (_lsGet = lsGet(KEYS.lots)) !== null && _lsGet !== void 0 ? _lsGet : [];
+      return (_lsGet = lsGet(KEYS.orders)) !== null && _lsGet !== void 0 ? _lsGet : [];
     }),
     _useState4 = _slicedToArray(_useState3, 2),
-    lots = _useState4[0],
-    setLots = _useState4[1];
+    orders = _useState4[0],
+    setOrders = _useState4[1];
   var _useState5 = useState(function () {
       var _lsGet2;
-      return (_lsGet2 = lsGet(KEYS.orders)) !== null && _lsGet2 !== void 0 ? _lsGet2 : [];
+      return (_lsGet2 = lsGet(KEYS.mapping)) !== null && _lsGet2 !== void 0 ? _lsGet2 : [];
     }),
     _useState6 = _slicedToArray(_useState5, 2),
-    orders = _useState6[0],
-    setOrders = _useState6[1];
-  var _useState7 = useState(function () {
-      var _lsGet3;
-      return (_lsGet3 = lsGet(KEYS.mapping)) !== null && _lsGet3 !== void 0 ? _lsGet3 : [];
-    }),
-    _useState8 = _slicedToArray(_useState7, 2),
-    mapping = _useState8[0],
-    setMapping = _useState8[1];
-  var upL = useCallback(function (fn) {
-    setLots(function (p) {
-      var n = fn(p);
-      lsSet(KEYS.lots, n);
-      return n;
-    });
-  }, []);
+    mapping = _useState6[0],
+    setMapping = _useState6[1];
   var upO = useCallback(function (fn) {
     setOrders(function (p) {
       var n = fn(p);
@@ -617,16 +648,16 @@ function App() {
       return n;
     });
   }, []);
-  var getLot = function getLot(id) {
-    return lots.find(function (l) {
-      return l.id === id;
-    });
-  };
   var getMap = function getMap(ext) {
     return mapping.find(function (m) {
       return m.externalCode === String(ext || "").trim();
     });
   };
+
+  // Clean old photos on startup
+  React.useEffect(function () {
+    cleanOldPhotos();
+  }, []);
   return /*#__PURE__*/React.createElement("div", {
     style: s.root
   }, /*#__PURE__*/React.createElement("header", {
@@ -638,18 +669,15 @@ function App() {
     size: 22
   }), /*#__PURE__*/React.createElement("span", {
     style: s.hdrT
-  }, "LAROME \xB7 Lotes"))), /*#__PURE__*/React.createElement("main", {
+  }, "LAROME \xB7 Pedidos"))), /*#__PURE__*/React.createElement("main", {
     style: s.main
   }, tab === "orders" && /*#__PURE__*/React.createElement(OrdersTab, {
-    lots: lots,
     orders: orders,
     upO: upO,
-    getLot: getLot,
     getMap: getMap,
-    mapping: mapping
-  }), tab === "lots" && /*#__PURE__*/React.createElement(LotsTab, {
-    lots: lots,
-    upL: upL
+    mapping: mapping,
+    getPhotos: getPhotos,
+    savePhotos: savePhotos
   }), tab === "mapping" && /*#__PURE__*/React.createElement(MappingTab, {
     mapping: mapping,
     upM: upM
@@ -659,10 +687,6 @@ function App() {
     key: "orders",
     icon: "cart",
     label: "Pedidos"
-  }, {
-    key: "lots",
-    icon: "tag",
-    label: "Lotes"
   }, {
     key: "mapping",
     icon: "link",
@@ -679,149 +703,41 @@ function App() {
       }
     }, /*#__PURE__*/React.createElement(Icon, {
       name: icon,
-      size: 20
+      size: 22
     }), /*#__PURE__*/React.createElement("span", {
       style: s.nl
     }, label));
   })));
 }
 
-// ─── LOTES TAB — solo número de lote ────────────────────────────────────────
-function LotsTab(_ref4) {
-  var lots = _ref4.lots,
-    upL = _ref4.upL;
+// ─── ORDERS TAB ──────────────────────────────────────────────────────────────
+function OrdersTab(_ref4) {
+  var orders = _ref4.orders,
+    upO = _ref4.upO,
+    getMap = _ref4.getMap,
+    mapping = _ref4.mapping,
+    getPhotos = _ref4.getPhotos,
+    savePhotos = _ref4.savePhotos;
+  var _useState7 = useState("list"),
+    _useState8 = _slicedToArray(_useState7, 2),
+    view = _useState8[0],
+    setView = _useState8[1];
   var _useState9 = useState(""),
     _useState0 = _slicedToArray(_useState9, 2),
-    lot = _useState0[0],
-    setLot = _useState0[1];
-  var _useState1 = useState(false),
+    search = _useState0[0],
+    setSearch = _useState0[1];
+  var _useState1 = useState([]),
     _useState10 = _slicedToArray(_useState1, 2),
-    open = _useState10[0],
-    setOpen = _useState10[1];
+    lines = _useState10[0],
+    setLines = _useState10[1];
   var _useState11 = useState(""),
     _useState12 = _slicedToArray(_useState11, 2),
-    search = _useState12[0],
-    setSearch = _useState12[1];
-  var add = function add() {
-    if (!lot.trim()) return;
-    upL(function (l) {
-      return [{
-        id: uid(),
-        lot: lot.trim()
-      }].concat(_toConsumableArray(l));
-    });
-    setLot("");
-    setOpen(false);
-  };
-  var filtered = lots.filter(function (l) {
-    return !search || l.lot.includes(search);
-  });
-  return /*#__PURE__*/React.createElement("div", {
-    style: s.sec
-  }, /*#__PURE__*/React.createElement("div", {
-    style: s.sh
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: s.st
-  }, "Lotes"), /*#__PURE__*/React.createElement("button", {
-    style: s.btnp,
-    onClick: function onClick() {
-      return setOpen(!open);
-    }
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "plus",
-    size: 16
-  }), " A\xF1adir")), /*#__PURE__*/React.createElement(SBar, {
-    value: search,
-    onChange: setSearch,
-    placeholder: "Buscar n\xBA lote\u2026"
-  }), open && /*#__PURE__*/React.createElement("div", {
-    style: s.card
-  }, /*#__PURE__*/React.createElement("input", {
-    style: s.inp,
-    placeholder: "N\xBA Lote (ej. 6325)",
-    value: lot,
-    autoFocus: true,
-    onChange: function onChange(e) {
-      return setLot(e.target.value);
-    },
-    onKeyDown: function onKeyDown(e) {
-      return e.key === "Enter" && add();
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    style: s.btnp,
-    onClick: add
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "check",
-    size: 14
-  }), " Guardar"), /*#__PURE__*/React.createElement("button", {
-    style: s.btng,
-    onClick: function onClick() {
-      return setOpen(false);
-    }
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "x",
-    size: 14
-  }), " Cancelar"))), filtered.map(function (l) {
-    return /*#__PURE__*/React.createElement("div", {
-      key: l.id,
-      style: s.listItem
-    }, /*#__PURE__*/React.createElement("div", {
-      style: s.lotB
-    }, l.lot), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }), /*#__PURE__*/React.createElement("button", {
-      style: s.btnd,
-      onClick: function onClick() {
-        return upL(function (ls) {
-          return ls.filter(function (x) {
-            return x.id !== l.id;
-          });
-        });
-      }
-    }, /*#__PURE__*/React.createElement(Icon, {
-      name: "trash",
-      size: 14
-    })));
-  }), filtered.length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: s.empty
-  }, search ? "Sin resultados." : "Sin lotes todavía."));
-}
-
-// ─── ORDERS TAB ──────────────────────────────────────────────────────────────
-function OrdersTab(_ref5) {
-  var lots = _ref5.lots,
-    orders = _ref5.orders,
-    upO = _ref5.upO,
-    getLot = _ref5.getLot,
-    getMap = _ref5.getMap,
-    mapping = _ref5.mapping;
-  var _useState13 = useState("list"),
+    orderRef = _useState12[0],
+    setRef = _useState12[1];
+  var _useState13 = useState(today()),
     _useState14 = _slicedToArray(_useState13, 2),
-    view = _useState14[0],
-    setView = _useState14[1];
-  var _useState15 = useState(""),
-    _useState16 = _slicedToArray(_useState15, 2),
-    search = _useState16[0],
-    setSearch = _useState16[1];
-  var _useState17 = useState([]),
-    _useState18 = _slicedToArray(_useState17, 2),
-    pending = _useState18[0],
-    setPending = _useState18[1];
-  var _useState19 = useState(""),
-    _useState20 = _slicedToArray(_useState19, 2),
-    orderRef = _useState20[0],
-    setRef = _useState20[1];
-  var _useState21 = useState(today()),
-    _useState22 = _slicedToArray(_useState21, 2),
-    orderDate = _useState22[0],
-    setDate = _useState22[1];
+    orderDate = _useState14[0],
+    setDate = _useState14[1];
   var readExcel = function readExcel(file, cb) {
     var reader = new FileReader();
     reader.onload = function (evt) {
@@ -843,7 +759,7 @@ function OrdersTab(_ref5) {
     var file = e.target.files[0];
     if (!file) return;
     readExcel(file, function (raw) {
-      var lines = raw.map(function (row) {
+      var parsed = raw.map(function (row) {
         var r = {};
         Object.keys(row).forEach(function (k) {
           r[norm(k)] = String(row[k]).trim();
@@ -852,58 +768,72 @@ function OrdersTab(_ref5) {
       }).map(function (r) {
         return {
           id: uid(),
-          externalCode: (r.codigo || r.code || r.articulo || r.codice || "").toString().trim(),
+          externalCode: (r.codigo || r.code || r.codice || r.articulo || "").toString().trim(),
           nameOrig: (r.nombre || r.name || r.descrizione || r.descripcion || "").trim(),
           qty: Number(r.cantidad || r.qty || r.quantita || r.quantità || 0) || 0,
-          lotId: ""
+          lotes: "" // user will type e.g. "6325,6326"
         };
       }).filter(function (r) {
         return r.externalCode && r.qty > 0;
       });
-      if (lines.length === 0) {
-        alert("No se encontraron líneas. Columnas esperadas: CODIGO, NOMBRE, CANTIDAD");
+      if (!parsed.length) {
+        alert("No se encontraron líneas. Columnas: CODIGO, NOMBRE, CANTIDAD");
         return;
       }
+      setLines(parsed);
       setRef("");
       setDate(today());
-      setPending(lines);
-      setView("import");
+      setView("edit");
     });
     e.target.value = "";
   };
   var saveOrder = function saveOrder() {
-    var allLines = pending.map(function (l) {
+    if (!lines.length) return;
+    var enriched = lines.map(function (l) {
       var _getMap, _getMap2;
-      return {
-        id: l.id,
-        externalCode: l.externalCode,
-        qty: l.qty,
-        lotId: l.lotId || null,
+      return _objectSpread(_objectSpread({}, l), {}, {
         laromCode: ((_getMap = getMap(l.externalCode)) === null || _getMap === void 0 ? void 0 : _getMap.laromCode) || null,
         name: ((_getMap2 = getMap(l.externalCode)) === null || _getMap2 === void 0 ? void 0 : _getMap2.name) || l.nameOrig
-      };
+      });
     });
-    var order = {
-      id: uid(),
-      ref: orderRef.trim() || "PED-".concat(Date.now()),
-      date: orderDate,
-      lines: allLines
-    };
     upO(function (o) {
-      return [order].concat(_toConsumableArray(o));
+      return [{
+        id: uid(),
+        ref: orderRef.trim() || "PED-".concat(Date.now()),
+        date: orderDate,
+        lines: enriched
+      }].concat(_toConsumableArray(o));
     });
     setView("list");
-    setPending([]);
+    setLines([]);
   };
   var exportCRM = function exportCRM(order) {
-    var rows = order.lines.map(function (l) {
-      var _getLot;
-      return {
-        CODIGO: l.externalCode,
-        CODIGO_LAROME: l.laromCode || "",
-        CANTIDAD: l.qty,
-        LOTE: ((_getLot = getLot(l.lotId)) === null || _getLot === void 0 ? void 0 : _getLot.lot) || ""
-      };
+    var rows = [];
+    order.lines.forEach(function (l) {
+      var m = getMap(l.externalCode);
+      var precio = (m === null || m === void 0 ? void 0 : m.precio) || 0;
+      var lotList = (l.lotes || "").split(",").map(function (x) {
+        return x.trim();
+      }).filter(Boolean);
+      if (lotList.length > 1) {
+        lotList.forEach(function (lot) {
+          return rows.push({
+            "CODIGO LAROME": l.laromCode || "",
+            "CANTIDAD": l.qty,
+            "PRECIO": precio,
+            "LOTE": lot,
+            "N/PEDIDO QUALIFARMA": order.ref || ""
+          });
+        });
+      } else {
+        rows.push({
+          "CODIGO LAROME": l.laromCode || "",
+          "CANTIDAD": l.qty,
+          "PRECIO": precio,
+          "LOTE": lotList[0] || "",
+          "N/PEDIDO QUALIFARMA": order.ref || ""
+        });
+      }
     });
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pedido");
@@ -916,14 +846,64 @@ function OrdersTab(_ref5) {
       });
     });
   };
+  var openEdit = function openEdit(order) {
+    setLines(order.lines.map(function (l) {
+      return _objectSpread({}, l);
+    }));
+    setRef(order.ref);
+    setDate(order.date);
+    setView("edit-existing-" + order.id);
+  };
+  var saveExisting = function saveExisting(orderId) {
+    upO(function (o) {
+      return o.map(function (x) {
+        return x.id === orderId ? _objectSpread(_objectSpread({}, x), {}, {
+          ref: orderRef,
+          date: orderDate,
+          lines: lines.map(function (l) {
+            var _getMap3, _getMap4;
+            return _objectSpread(_objectSpread({}, l), {}, {
+              laromCode: ((_getMap3 = getMap(l.externalCode)) === null || _getMap3 === void 0 ? void 0 : _getMap3.laromCode) || l.laromCode || null,
+              name: ((_getMap4 = getMap(l.externalCode)) === null || _getMap4 === void 0 ? void 0 : _getMap4.name) || l.name || l.nameOrig
+            });
+          })
+        }) : x;
+      });
+    });
+    setView("list");
+    setLines([]);
+  };
   var filtered = orders.filter(function (o) {
     return !search || o.ref.toLowerCase().includes(search.toLowerCase()) || o.lines.some(function (l) {
       return (l.externalCode || "").includes(search) || (l.name || "").toLowerCase().includes(search.toLowerCase());
     });
   });
 
+  // ── EDIT VIEW ──
+  if (view === "edit" || view.startsWith("edit-existing-")) {
+    var isExisting = view.startsWith("edit-existing-");
+    var existingId = isExisting ? view.replace("edit-existing-", "") : null;
+    return /*#__PURE__*/React.createElement(EditView, {
+      lines: lines,
+      setLines: setLines,
+      orderRef: orderRef,
+      setRef: setRef,
+      orderDate: orderDate,
+      setDate: setDate,
+      getMap: getMap,
+      mapping: mapping,
+      onSave: function onSave() {
+        return isExisting ? saveExisting(existingId) : saveOrder();
+      },
+      onCancel: function onCancel() {
+        setView("list");
+        setLines([]);
+      }
+    });
+  }
+
   // ── LIST ──
-  if (view === "list") return /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", {
     style: s.sec
   }, /*#__PURE__*/React.createElement("div", {
     style: s.sh
@@ -934,7 +914,7 @@ function OrdersTab(_ref5) {
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "up",
     size: 15
-  }), " Importar Excel", /*#__PURE__*/React.createElement("input", {
+  }), " Importar", /*#__PURE__*/React.createElement("input", {
     type: "file",
     accept: ".xlsx,.xls",
     style: {
@@ -946,7 +926,7 @@ function OrdersTab(_ref5) {
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "alert",
     size: 14
-  }), " Primero importa la tabla de c\xF3digos en \"C\xF3digos\""), /*#__PURE__*/React.createElement(SBar, {
+  }), " Importa primero la tabla de c\xF3digos en \"C\xF3digos\""), /*#__PURE__*/React.createElement(SBar, {
     value: search,
     onChange: setSearch,
     placeholder: "Buscar pedido\u2026"
@@ -954,30 +934,99 @@ function OrdersTab(_ref5) {
     return /*#__PURE__*/React.createElement(OrderCard, {
       key: order.id,
       order: order,
-      getLot: getLot,
+      getMap: getMap,
       removeOrder: removeOrder,
       exportCRM: exportCRM,
-      lots: lots,
-      upO: upO
+      onEdit: function onEdit() {
+        return openEdit(order);
+      },
+      getPhotos: getPhotos,
+      savePhotos: savePhotos
     });
   }), filtered.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: s.empty
-  }, search ? "Sin resultados." : "Importa un Excel de Qualifarma para empezar."));
+  }, search ? "Sin resultados." : "Importa un Excel de Qualifarma."));
+}
 
-  // ── IMPORT: asignar lotes ──
-  var ventaLines = pending.filter(function (l) {
+// ─── Edit view ────────────────────────────────────────────────────────────────
+function EditView(_ref5) {
+  var lines = _ref5.lines,
+    setLines = _ref5.setLines,
+    orderRef = _ref5.orderRef,
+    setRef = _ref5.setRef,
+    orderDate = _ref5.orderDate,
+    setDate = _ref5.setDate,
+    getMap = _ref5.getMap,
+    mapping = _ref5.mapping,
+    onSave = _ref5.onSave,
+    onCancel = _ref5.onCancel;
+  var addManual = function addManual() {
+    setLines(function (ls) {
+      return [].concat(_toConsumableArray(ls), [{
+        id: uid(),
+        externalCode: "",
+        nameOrig: "",
+        qty: 0,
+        lotes: "",
+        _manual: true
+      }]);
+    });
+  };
+  var updateLine = function updateLine(id, field, value) {
+    return setLines(function (ls) {
+      return ls.map(function (x) {
+        return x.id === id ? _objectSpread(_objectSpread({}, x), {}, _defineProperty({}, field, value)) : x;
+      });
+    });
+  };
+  var removeLine = function removeLine(id) {
+    return setLines(function (ls) {
+      return ls.filter(function (x) {
+        return x.id !== id;
+      });
+    });
+  };
+
+  // Box summary
+  var summary = function () {
+    var eq100 = 0,
+      eq20 = 0,
+      nicho100 = 0,
+      nicho20 = 0;
+    lines.forEach(function (l) {
+      var m = getMap(l.externalCode);
+      if (!m || !isVenta(l.externalCode)) return;
+      var upb = m.unitsPerBox || 0;
+      if (!upb) return;
+      var boxes = Math.floor(Number(l.qty) || 0) / upb;
+      var cat = getCategory(m.laromCode);
+      var is100 = get100ml(m.laromCode);
+      if (cat === "equivalencia" && is100) eq100 += boxes;else if (cat === "equivalencia" && !is100) eq20 += boxes;else if (cat === "nicho" && is100) nicho100 += boxes;else if (cat === "nicho" && !is100) nicho20 += boxes;
+    });
+    return {
+      eq100: eq100,
+      eq20: eq20,
+      nicho100: nicho100,
+      nicho20: nicho20,
+      total: eq100 + eq20 + nicho100 + nicho20
+    };
+  }();
+  var ventaLines = lines.filter(function (l) {
     return isVenta(l.externalCode);
   });
-  var otherLines = pending.filter(function (l) {
+  var otherLines = lines.filter(function (l) {
     return !isVenta(l.externalCode);
   });
+  var totalDone = ventaLines.filter(function (l) {
+    return (l.lotes || "").trim();
+  }).length;
   return /*#__PURE__*/React.createElement("div", {
     style: s.sec
   }, /*#__PURE__*/React.createElement("div", {
     style: s.sh
   }, /*#__PURE__*/React.createElement("h2", {
     style: s.st
-  }, "Asignar lotes")), /*#__PURE__*/React.createElement("div", {
+  }, "Preparar pedido")), /*#__PURE__*/React.createElement("div", {
     style: s.card
   }, /*#__PURE__*/React.createElement("input", {
     style: s.inp,
@@ -994,17 +1043,33 @@ function OrdersTab(_ref5) {
       return setDate(e.target.value);
     }
   })), /*#__PURE__*/React.createElement("div", {
-    style: s.secLabel
-  }, "Productos de venta \u2014 asigna lote"), ventaLines.map(function (line) {
+    style: s.progressBar
+  }, /*#__PURE__*/React.createElement("div", {
+    style: _objectSpread(_objectSpread({}, s.progressFill), {}, {
+      width: "".concat(ventaLines.length ? Math.round(totalDone / ventaLines.length * 100) : 0, "%")
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: MUTED,
+      textAlign: "center"
+    }
+  }, totalDone, "/", ventaLines.length, " productos con lote asignado"), ventaLines.map(function (line) {
     var m = getMap(line.externalCode);
-    var bErr = m !== null && m !== void 0 && m.unitsPerBox ? boxError(m.unitsPerBox, line.qty) : null;
+    var done = !!(line.lotes || "").trim();
+    var upb = (m === null || m === void 0 ? void 0 : m.unitsPerBox) || 0;
+    var boxes = upb && line.qty ? Math.floor(Number(line.qty) / upb) : null;
+    var bErr = boxError(upb, line.qty);
     return /*#__PURE__*/React.createElement("div", {
       key: line.id,
-      style: s.card
+      style: _objectSpread(_objectSpread({}, s.lineCard), done ? s.lineCardDone : {})
     }, /*#__PURE__*/React.createElement("div", {
       style: s.lineHead
     }, /*#__PURE__*/React.createElement("span", {
-      style: s.extB
+      style: _objectSpread(_objectSpread({}, s.extB), done ? {
+        borderColor: GREEN,
+        color: GREEN
+      } : {})
     }, line.externalCode), /*#__PURE__*/React.createElement("div", {
       style: {
         flex: 1,
@@ -1014,61 +1079,74 @@ function OrdersTab(_ref5) {
       style: {
         fontWeight: 700,
         fontSize: 13,
-        color: TEXT
+        color: done ? GREEN : TEXT,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
       }
-    }, (m === null || m === void 0 ? void 0 : m.name) || line.nameOrig), m ? /*#__PURE__*/React.createElement("div", {
+    }, (m === null || m === void 0 ? void 0 : m.name) || line.nameOrig || line.externalCode), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
-        color: MUTED
+        color: MUTED,
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        flexWrap: "wrap"
       }
-    }, "LAROME ", /*#__PURE__*/React.createElement("strong", {
+    }, m && /*#__PURE__*/React.createElement("span", null, "LAROME ", /*#__PURE__*/React.createElement("strong", {
       style: {
         color: AMBER
       }
-    }, m.laromCode), m.unitsPerBox ? " \xB7 ".concat(m.unitsPerBox, " uds/caja") : "") : /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: DANGER
-      }
-    }, "\u26A0 Sin correspondencia en tabla de c\xF3digos")), /*#__PURE__*/React.createElement("span", {
+    }, m.laromCode)), /*#__PURE__*/React.createElement("span", {
       style: {
         fontWeight: 700,
-        fontSize: 15,
-        color: TEXT,
+        color: TEXT
+      }
+    }, line.qty, " uds"), boxes !== null && /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread({}, s.boxBadge)
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "box",
+      size: 10
+    }), " ", boxes, " caja", boxes !== 1 ? "s" : ""))), done && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: GREEN,
+        fontSize: 18,
         flexShrink: 0
       }
-    }, line.qty, " uds")), bErr && /*#__PURE__*/React.createElement("div", {
-      style: _objectSpread(_objectSpread({}, s.chip), s.chipWarn)
+    }, "\u2713")), bErr && /*#__PURE__*/React.createElement("div", {
+      style: _objectSpread(_objectSpread(_objectSpread({}, s.chip), s.chipWarn), {}, {
+        flexWrap: "wrap",
+        gap: 6
+      })
     }, /*#__PURE__*/React.createElement(Icon, {
       name: "alert",
       size: 12
-    }), bErr), /*#__PURE__*/React.createElement("select", {
-      style: s.inpsm,
-      value: line.lotId,
+    }), /*#__PURE__*/React.createElement("span", null, bErr.msg), bErr.suggestions.map(function (sug) {
+      return /*#__PURE__*/React.createElement("button", {
+        key: sug,
+        style: s.sugBtn,
+        onClick: function onClick() {
+          return updateLine(line.id, "qty", sug);
+        }
+      }, sug, " uds");
+    })), /*#__PURE__*/React.createElement("input", {
+      style: _objectSpread(_objectSpread({}, s.inp), done ? {
+        borderColor: GREEN + "66",
+        color: GREEN
+      } : {}),
+      placeholder: "Lote(s): 6325 o 6325,6326",
+      value: line.lotes || "",
       onChange: function onChange(e) {
-        return setPending(function (ls) {
-          return ls.map(function (x) {
-            return x.id === line.id ? _objectSpread(_objectSpread({}, x), {}, {
-              lotId: e.target.value
-            }) : x;
-          });
-        });
+        return updateLine(line.id, "lotes", e.target.value);
       }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: ""
-    }, "\u2014 Selecciona lote \u2014"), lots.map(function (l) {
-      return /*#__PURE__*/React.createElement("option", {
-        key: l.id,
-        value: l.id
-      }, "Lote ", l.lot, " \xB7 ", l.qty, " uds \xB7 ", l.date);
-    })));
+    }));
   }), otherLines.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: s.secLabel
-  }, "Otros (testers, expositores \u2014 sin lote)"), otherLines.map(function (line) {
+  }, "Otros (testers, expositores)"), otherLines.map(function (line) {
     var m = getMap(line.externalCode);
     return /*#__PURE__*/React.createElement("div", {
       key: line.id,
-      style: _objectSpread(_objectSpread({}, s.card), {}, {
+      style: _objectSpread(_objectSpread({}, s.lineCard), {}, {
         opacity: 0.6
       })
     }, /*#__PURE__*/React.createElement("div", {
@@ -1089,78 +1167,287 @@ function OrdersTab(_ref5) {
         fontSize: 13,
         color: MUTED
       }
-    }, (m === null || m === void 0 ? void 0 : m.name) || line.nameOrig), m && /*#__PURE__*/React.createElement("div", {
+    }, (m === null || m === void 0 ? void 0 : m.name) || line.nameOrig), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: MUTED
       }
-    }, "LAROME ", m.laromCode)), /*#__PURE__*/React.createElement("span", {
+    }, line.qty, " uds", m ? " \xB7 LAROME ".concat(m.laromCode) : ""))));
+  })), /*#__PURE__*/React.createElement("button", {
+    style: _objectSpread(_objectSpread({}, s.btng), {}, {
+      justifyContent: "center"
+    }),
+    onClick: addManual
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "plus",
+    size: 14
+  }), " A\xF1adir l\xEDnea manual"), lines.filter(function (l) {
+    return l._manual;
+  }).map(function (line) {
+    var m = getMap(line.externalCode);
+    return /*#__PURE__*/React.createElement("div", {
+      key: line.id,
+      style: s.card
+    }, /*#__PURE__*/React.createElement("div", {
       style: {
-        fontWeight: 600,
-        fontSize: 14,
-        color: MUTED,
-        flexShrink: 0
+        display: "flex",
+        gap: 6,
+        alignItems: "center"
       }
-    }, line.qty, " uds")));
-  })), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement(ManualProductPicker, {
+      mapping: mapping,
+      value: line.externalCode,
+      onChange: function onChange(v) {
+        return updateLine(line.id, "externalCode", v);
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      style: _objectSpread(_objectSpread({}, s.inpsm), {}, {
+        flex: 1
+      }),
+      type: "number",
+      placeholder: "Cantidad",
+      value: line.qty || "",
+      onChange: function onChange(e) {
+        return updateLine(line.id, "qty", Number(e.target.value));
+      }
+    }), /*#__PURE__*/React.createElement("input", {
+      style: _objectSpread(_objectSpread({}, s.inpsm), {}, {
+        flex: 1
+      }),
+      placeholder: "Lote(s)",
+      value: line.lotes || "",
+      onChange: function onChange(e) {
+        return updateLine(line.id, "lotes", e.target.value);
+      }
+    }))), /*#__PURE__*/React.createElement("button", {
+      style: s.btnd,
+      onClick: function onClick() {
+        return removeLine(line.id);
+      }
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "trash",
+      size: 14
+    }))));
+  }), summary.total > 0 && /*#__PURE__*/React.createElement("div", {
+    style: s.summaryCard
+  }, /*#__PURE__*/React.createElement("div", {
+    style: s.cTitle
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "box",
+    size: 15
+  }), " Resumen de cajas"), summary.eq100 > 0 && /*#__PURE__*/React.createElement("div", {
+    style: s.summaryRow
+  }, /*#__PURE__*/React.createElement("span", null, "Equivalencia 100ml"), /*#__PURE__*/React.createElement("span", {
+    style: s.summaryVal
+  }, summary.eq100, " cajas")), summary.eq20 > 0 && /*#__PURE__*/React.createElement("div", {
+    style: s.summaryRow
+  }, /*#__PURE__*/React.createElement("span", null, "Equivalencia 20ml"), /*#__PURE__*/React.createElement("span", {
+    style: s.summaryVal
+  }, summary.eq20, " cajas")), summary.nicho100 > 0 && /*#__PURE__*/React.createElement("div", {
+    style: s.summaryRow
+  }, /*#__PURE__*/React.createElement("span", null, "Nicho 100ml"), /*#__PURE__*/React.createElement("span", {
+    style: s.summaryVal
+  }, summary.nicho100, " cajas")), summary.nicho20 > 0 && /*#__PURE__*/React.createElement("div", {
+    style: s.summaryRow
+  }, /*#__PURE__*/React.createElement("span", null, "Nicho 20ml"), /*#__PURE__*/React.createElement("span", {
+    style: s.summaryVal
+  }, summary.nicho20, " cajas")), /*#__PURE__*/React.createElement("div", {
+    style: _objectSpread(_objectSpread({}, s.summaryRow), {}, {
+      borderTop: "1px solid ".concat(BORDER),
+      marginTop: 4,
+      paddingTop: 8,
+      fontWeight: 700
+    })
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: TEXT
+    }
+  }, "TOTAL"), /*#__PURE__*/React.createElement("span", {
+    style: _objectSpread(_objectSpread({}, s.summaryVal), {}, {
+      fontSize: 18,
+      color: AMBER
+    })
+  }, summary.total, " cajas"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      gap: 8,
-      marginTop: 4
+      gap: 8
     }
   }, /*#__PURE__*/React.createElement("button", {
     style: s.btnp,
-    onClick: saveOrder
+    onClick: onSave
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "check",
     size: 14
   }), " Guardar pedido"), /*#__PURE__*/React.createElement("button", {
     style: s.btng,
-    onClick: function onClick() {
-      setView("list");
-      setPending([]);
-    }
+    onClick: onCancel
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "x",
     size: 14
   }), " Cancelar")));
 }
 
-// ─── Order card con edición de lote inline ────────────────────────────────────
-function OrderCard(_ref6) {
-  var order = _ref6.order,
-    getLot = _ref6.getLot,
-    removeOrder = _ref6.removeOrder,
-    exportCRM = _ref6.exportCRM,
-    lots = _ref6.lots,
-    upO = _ref6.upO;
-  var _useState23 = useState(false),
+// ─── Manual product picker ─────────────────────────────────────────────────
+function ManualProductPicker(_ref6) {
+  var mapping = _ref6.mapping,
+    value = _ref6.value,
+    onChange = _ref6.onChange;
+  var _useState15 = useState(""),
+    _useState16 = _slicedToArray(_useState15, 2),
+    q = _useState16[0],
+    setQ = _useState16[1];
+  var _useState17 = useState(false),
+    _useState18 = _slicedToArray(_useState17, 2),
+    open = _useState18[0],
+    setOpen = _useState18[1];
+  var sel = mapping.find(function (m) {
+    return m.externalCode === value;
+  });
+  var results = mapping.filter(function (m) {
+    return !q || (m.name || "").toLowerCase().includes(q.toLowerCase()) || m.laromCode.includes(q) || m.externalCode.includes(q);
+  }).slice(0, 6);
+  if (sel && !open) return /*#__PURE__*/React.createElement("button", {
+    style: _objectSpread(_objectSpread({}, s.inpsm), {}, {
+      display: "flex",
+      justifyContent: "space-between",
+      cursor: "pointer"
+    }),
+    onClick: function onClick() {
+      return setOpen(true);
+    }
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("strong", null, sel.name), " \xB7 ", sel.laromCode), /*#__PURE__*/React.createElement(Icon, {
+    name: "x",
+    size: 13
+  }));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    style: s.inpsm,
+    placeholder: "Buscar producto\u2026",
+    value: q,
+    autoFocus: true,
+    onChange: function onChange(e) {
+      setQ(e.target.value);
+      setOpen(true);
+    },
+    onFocus: function onFocus() {
+      return setOpen(true);
+    }
+  }), open && q && /*#__PURE__*/React.createElement("div", {
+    style: s.dropdown
+  }, results.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "10px 14px",
+      color: MUTED,
+      fontSize: 13
+    }
+  }, "Sin resultados"), results.map(function (m, i) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: i,
+      style: s.dropItem,
+      onClick: function onClick() {
+        onChange(m.externalCode);
+        setQ("");
+        setOpen(false);
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        color: TEXT,
+        fontSize: 13
+      }
+    }, m.name), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: AMBER,
+        fontSize: 12,
+        marginLeft: 8
+      }
+    }, m.laromCode));
+  })));
+}
+
+// ─── Order card ───────────────────────────────────────────────────────────────
+function OrderCard(_ref7) {
+  var order = _ref7.order,
+    getMap = _ref7.getMap,
+    removeOrder = _ref7.removeOrder,
+    exportCRM = _ref7.exportCRM,
+    onEdit = _ref7.onEdit,
+    getPhotos = _ref7.getPhotos,
+    savePhotos = _ref7.savePhotos;
+  var _useState19 = useState(false),
+    _useState20 = _slicedToArray(_useState19, 2),
+    open = _useState20[0],
+    setOpen = _useState20[1];
+  var _useState21 = useState(false),
+    _useState22 = _slicedToArray(_useState21, 2),
+    showPhotos = _useState22[0],
+    setShowPhotos = _useState22[1];
+  var _useState23 = useState(function () {
+      return getPhotos()[order.id] || [];
+    }),
     _useState24 = _slicedToArray(_useState23, 2),
-    open = _useState24[0],
-    setOpen = _useState24[1];
-  var _useState25 = useState(false),
-    _useState26 = _slicedToArray(_useState25, 2),
-    editing = _useState26[0],
-    setEditing = _useState26[1];
-  var _useState27 = useState(order.lines),
-    _useState28 = _slicedToArray(_useState27, 2),
-    lines = _useState28[0],
-    setLines = _useState28[1];
+    photos = _useState24[0],
+    setPhotos = _useState24[1];
   var ventaLines = order.lines.filter(function (l) {
     return isVenta(l.externalCode);
   });
-  var sinLote = ventaLines.filter(function (l) {
-    return !l.lotId;
+  var done = ventaLines.filter(function (l) {
+    return (l.lotes || "").trim();
   }).length;
-  var saveLines = function saveLines() {
-    upO(function (orders) {
-      return orders.map(function (o) {
-        return o.id === order.id ? _objectSpread(_objectSpread({}, o), {}, {
-          lines: lines
-        }) : o;
-      });
+  var total = ventaLines.length;
+  var addPhoto = function addPhoto(e) {
+    var files = Array.from(e.target.files);
+    files.forEach(function (file) {
+      var reader = new FileReader();
+      reader.onload = function (evt) {
+        var photo = {
+          id: uid(),
+          data: evt.target.result,
+          date: today(),
+          name: file.name
+        };
+        setPhotos(function (prev) {
+          var next = [].concat(_toConsumableArray(prev), [photo]);
+          var all = getPhotos();
+          all[order.id] = next;
+          savePhotos(all);
+          return next;
+        });
+      };
+      reader.readAsDataURL(file);
     });
-    setEditing(false);
+    e.target.value = "";
+  };
+  var removePhoto = function removePhoto(pid) {
+    setPhotos(function (prev) {
+      var next = prev.filter(function (p) {
+        return p.id !== pid;
+      });
+      var all = getPhotos();
+      all[order.id] = next;
+      savePhotos(all);
+      return next;
+    });
+  };
+  var daysUntilDelete = function daysUntilDelete(dateStr) {
+    var del = new Date(dateStr);
+    del.setMonth(del.getMonth() + 2);
+    return Math.max(0, Math.round((del - new Date()) / 86400000));
   };
   return /*#__PURE__*/React.createElement("div", {
     style: s.card
@@ -1188,19 +1475,25 @@ function OrderCard(_ref6) {
     style: {
       fontSize: 12,
       color: MUTED,
-      marginTop: 2
+      marginTop: 2,
+      display: "flex",
+      gap: 8,
+      alignItems: "center",
+      flexWrap: "wrap"
     }
-  }, order.date, " \xB7 ", order.lines.length, " l\xEDneas", sinLote > 0 && /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("span", null, order.date, " \xB7 ", order.lines.length, " l\xEDneas"), done < total && /*#__PURE__*/React.createElement("span", {
     style: {
-      color: AMBER,
-      marginLeft: 8
+      color: AMBER
     }
-  }, "\xB7 ", sinLote, " sin lote"), sinLote === 0 && ventaLines.length > 0 && /*#__PURE__*/React.createElement("span", {
+  }, done, "/", total, " con lote"), done === total && total > 0 && /*#__PURE__*/React.createElement("span", {
     style: {
-      color: GREEN,
-      marginLeft: 8
+      color: GREEN
     }
-  }, "\xB7 \u2713 Listo"))), /*#__PURE__*/React.createElement("div", {
+  }, "\u2713 Completo"), photos.length > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: TEAL
+    }
+  }, "\uD83D\uDCF7 ", photos.length))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 6
@@ -1209,12 +1502,9 @@ function OrderCard(_ref6) {
     style: _objectSpread(_objectSpread({}, s.btng), {}, {
       padding: "7px 10px"
     }),
-    onClick: function onClick() {
-      setOpen(true);
-      setEditing(!editing);
-    }
+    onClick: onEdit
   }, /*#__PURE__*/React.createElement(Icon, {
-    name: "edit",
+    name: "up",
     size: 14
   })), /*#__PURE__*/React.createElement("button", {
     style: _objectSpread(_objectSpread({}, s.btnp), {}, {
@@ -1239,109 +1529,175 @@ function OrderCard(_ref6) {
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 8,
-      marginTop: 4
+      gap: 6,
+      marginTop: 6
     }
-  }, lines.map(function (l, i) {
-    var lot = getLot(l.lotId);
-    var venta = isVenta(l.externalCode);
+  }, order.lines.map(function (l, i) {
+    var done2 = (l.lotes || "").trim();
+    var m = getMap(l.externalCode);
+    var upb = (m === null || m === void 0 ? void 0 : m.unitsPerBox) || 0;
+    var boxes = upb && l.qty ? Math.floor(Number(l.qty) / upb) : null;
     return /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
         borderTop: "1px solid ".concat(BORDER),
-        paddingTop: 8
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
+        paddingTop: 6,
         display: "flex",
         alignItems: "center",
-        gap: 8,
-        marginBottom: editing && venta ? 6 : 0
+        gap: 8
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: _objectSpread(_objectSpread({}, s.extB), {}, {
-        fontSize: 10,
-        padding: "1px 5px"
-      }, !venta ? {
-        borderColor: BORDER,
-        color: MUTED
+        fontSize: 10
+      }, done2 ? {
+        borderColor: GREEN,
+        color: GREEN
       } : {})
     }, l.externalCode), /*#__PURE__*/React.createElement("span", {
       style: {
         flex: 1,
-        color: TEXT,
+        color: done2 ? GREEN : MUTED,
+        fontSize: 12,
         fontWeight: 600,
-        fontSize: 13
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap"
       }
-    }, l.name || l.laromCode || "—"), /*#__PURE__*/React.createElement("span", {
+    }, l.name || l.nameOrig || "—"), /*#__PURE__*/React.createElement("span", {
       style: {
         color: TEXT,
         fontWeight: 700,
-        fontSize: 13
+        fontSize: 12,
+        flexShrink: 0
       }
-    }, l.qty, " uds"), venta && !editing && (lot ? /*#__PURE__*/React.createElement("span", {
-      style: s.lotBsm
-    }, lot.lot) : /*#__PURE__*/React.createElement("span", {
+    }, l.qty, " uds"), boxes !== null && /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, s.boxBadge), {}, {
+        fontSize: 10,
+        flexShrink: 0
+      })
+    }, boxes, "cj"), done2 ? /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, s.lotBsm), {}, {
+        maxWidth: 80,
+        overflow: "hidden",
+        textOverflow: "ellipsis"
+      })
+    }, l.lotes) : /*#__PURE__*/React.createElement("span", {
       style: {
         color: AMBER,
-        fontSize: 11
+        fontSize: 11,
+        flexShrink: 0
       }
-    }, "sin lote"))), editing && venta && /*#__PURE__*/React.createElement("select", {
-      style: s.inpsm,
-      value: l.lotId || "",
-      onChange: function onChange(e) {
-        return setLines(function (ls) {
-          return ls.map(function (x, j) {
-            return j === i ? _objectSpread(_objectSpread({}, x), {}, {
-              lotId: e.target.value
-            }) : x;
-          });
-        });
-      }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: ""
-    }, "\u2014 Sin lote \u2014"), lots.map(function (lt) {
-      return /*#__PURE__*/React.createElement("option", {
-        key: lt.id,
-        value: lt.id
-      }, "Lote ", lt.lot, " \xB7 ", lt.qty, " uds \xB7 ", lt.date);
-    })));
-  }), editing && /*#__PURE__*/React.createElement("div", {
+    }, "sin lote"));
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: "1px solid ".concat(BORDER),
+      paddingTop: 10,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: MUTED,
+      textTransform: "uppercase",
+      letterSpacing: "0.06em"
+    }
+  }, "Fotos del embalaje ", photos.length > 0 && "(".concat(photos.length, ")")), /*#__PURE__*/React.createElement("label", {
+    style: _objectSpread(_objectSpread({}, s.btni), {}, {
+      padding: "5px 10px",
+      fontSize: 11,
+      cursor: "pointer"
+    })
+  }, "\uD83D\uDCF7 A\xF1adir", /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: "image/*",
+    multiple: true,
+    capture: "environment",
+    style: {
+      display: "none"
+    },
+    onChange: addPhoto
+  }))), photos.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
-      marginTop: 4
+      flexWrap: "wrap"
     }
-  }, /*#__PURE__*/React.createElement("button", {
-    style: s.btnp,
-    onClick: saveLines
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "check",
-    size: 14
-  }), " Guardar"), /*#__PURE__*/React.createElement("button", {
-    style: s.btng,
-    onClick: function onClick() {
-      setLines(order.lines);
-      setEditing(false);
+  }, photos.map(function (photo) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: photo.id,
+      style: {
+        position: "relative"
+      }
+    }, /*#__PURE__*/React.createElement("img", {
+      src: photo.data,
+      alt: "",
+      style: {
+        width: 80,
+        height: 80,
+        objectFit: "cover",
+        borderRadius: 8,
+        border: "1px solid ".concat(BORDER),
+        cursor: "pointer"
+      },
+      onClick: function onClick() {
+        return window.open(photo.data, "_blank");
+      }
+    }), /*#__PURE__*/React.createElement("button", {
+      onClick: function onClick() {
+        return removePhoto(photo.id);
+      },
+      style: {
+        position: "absolute",
+        top: -6,
+        right: -6,
+        background: DANGER,
+        border: "none",
+        borderRadius: "50%",
+        width: 18,
+        height: 18,
+        color: "white",
+        fontSize: 10,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }
+    }, "\u2715"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: MUTED,
+        textAlign: "center",
+        marginTop: 2
+      }
+    }, daysUntilDelete(photo.date), "d"));
+  })), photos.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: MUTED
     }
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "x",
-    size: 14
-  }), " Cancelar"))));
+  }, "Sin fotos. A\xF1ade fotos del embalaje como prueba. Se borran autom\xE1ticamente a los 2 meses."))));
 }
 
 // ─── MAPPING TAB ─────────────────────────────────────────────────────────────
-function MappingTab(_ref7) {
-  var mapping = _ref7.mapping,
-    upM = _ref7.upM;
-  var _useState29 = useState(""),
-    _useState30 = _slicedToArray(_useState29, 2),
-    search = _useState30[0],
-    setSearch = _useState30[1];
-  var _useState31 = useState(null),
-    _useState32 = _slicedToArray(_useState31, 2),
-    preview = _useState32[0],
-    setPreview = _useState32[1];
+function MappingTab(_ref8) {
+  var mapping = _ref8.mapping,
+    upM = _ref8.upM;
+  var _useState25 = useState(""),
+    _useState26 = _slicedToArray(_useState25, 2),
+    search = _useState26[0],
+    setSearch = _useState26[1];
+  var _useState27 = useState(null),
+    _useState28 = _slicedToArray(_useState27, 2),
+    preview = _useState28[0],
+    setPreview = _useState28[1];
   var readExcel = function readExcel(file, cb) {
     var reader = new FileReader();
     reader.onload = function (evt) {
@@ -1354,7 +1710,7 @@ function MappingTab(_ref7) {
           defval: ""
         }));
       } catch (e) {
-        alert("Error leyendo el archivo: " + e.message);
+        alert("Error: " + e.message);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -1372,44 +1728,41 @@ function MappingTab(_ref7) {
       }).map(function (r) {
         return {
           externalCode: (r.codigo || r.codigoqualifarma || r.codice || r.codigoexterno || "").toString().trim(),
-          laromCode: (r.codigolarome || r.larome || r.codlarome || r.codigointerno || r.codlarome || "").toString().trim(),
-          name: (r.nombre || r.name || r.descrizione || r.descripcion || r.nombreCorto || "").trim(),
-          unitsPerBox: Number(r.unidadescaja || r.udscaja || r.unidadesxcaja || r.unidcaja || 0) || 0
+          laromCode: (r.codigolarome || r.larome || r.codlarome || r.codigointerno || r.codigoproducto || "").toString().trim(),
+          name: (r.nombre || r.name || r.descrizione || r.descripcion || "").trim(),
+          unitsPerBox: Number(r.unidadescaja || r.udscaja || r.unidadesxcaja || r.unidcaja || 0) || 0,
+          precio: Number(r.precio || r.price || r.pvp || 0) || 0
         };
       }).filter(function (r) {
         return r.externalCode && r.laromCode && r.laromCode !== "xxxxxx";
       });
-      if (parsed.length === 0) {
-        alert("No se encontraron filas válidas. Columnas: codigo, codigo_larome, nombre, unidades_caja");
+      if (!parsed.length) {
+        alert("Sin filas válidas. Columnas: codigo, codigo_larome, nombre, unidades_caja, precio");
         return;
       }
       setPreview(parsed);
     });
     e.target.value = "";
   };
-  var confirmImport = function confirmImport() {
-    upM(function () {
-      return preview;
-    });
-    setPreview(null);
-    alert("\u2713 ".concat(preview.length, " correspondencias importadas correctamente"));
-  };
   var exportTemplate = function exportTemplate() {
     var rows = [{
       codigo: "951617392",
       codigo_larome: "111202",
       nombre: "Body Mist Rose 250ml",
-      unidades_caja: 35
+      unidades_caja: 35,
+      precio: 5.57
     }, {
       codigo: "986477406",
       codigo_larome: "111301",
       nombre: "Bohemian 100ml",
-      unidades_caja: 24
+      unidades_caja: 24,
+      precio: 0
     }, {
-      codigo: "36100",
-      codigo_larome: "116301",
-      nombre: "Bohemian 20ml Tester",
-      unidades_caja: 8
+      codigo: "989355449",
+      codigo_larome: "411004",
+      nombre: "Teti 100ml",
+      unidades_caja: 40,
+      precio: 0
     }];
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Correspondencias");
@@ -1449,11 +1802,15 @@ function MappingTab(_ref7) {
     onChange: handleFile
   })))), /*#__PURE__*/React.createElement("div", {
     style: s.infoBox
-  }, "Tabla de correspondencias: c\xF3digo Qualifarma \u2192 c\xF3digo LAROME + nombre + uds/caja."), preview && /*#__PURE__*/React.createElement("div", {
+  }, "Columnas: ", /*#__PURE__*/React.createElement("code", {
+    style: {
+      color: AMBER
+    }
+  }, "codigo \xB7 codigo_larome \xB7 nombre \xB7 unidades_caja \xB7 precio")), preview && /*#__PURE__*/React.createElement("div", {
     style: s.card
   }, /*#__PURE__*/React.createElement("div", {
     style: s.cTitle
-  }, "Vista previa \u2014 ", preview.length, " art\xEDculos"), preview.slice(0, 5).map(function (m, i) {
+  }, preview.length, " art\xEDculos \u2014 vista previa"), preview.slice(0, 4).map(function (m, i) {
     return /*#__PURE__*/React.createElement("div", {
       key: i,
       style: s.mapRow
@@ -1473,28 +1830,35 @@ function MappingTab(_ref7) {
         flex: 1
       }
     }, m.name), m.unitsPerBox > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: MUTED,
-        fontSize: 11
-      }
-    }, m.unitsPerBox, "/cj"));
-  }), preview.length > 5 && /*#__PURE__*/React.createElement("div", {
+      style: s.boxB
+    }, m.unitsPerBox, "/cj"), m.precio > 0 && /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, s.boxB), {}, {
+        color: GREEN
+      })
+    }, "\u20AC", m.precio));
+  }), preview.length > 4 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: MUTED
     }
-  }, "\u2026y ", preview.length - 5, " m\xE1s"), /*#__PURE__*/React.createElement("div", {
+  }, "\u2026y ", preview.length - 4, " m\xE1s"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
     }
   }, /*#__PURE__*/React.createElement("button", {
     style: s.btnp,
-    onClick: confirmImport
+    onClick: function onClick() {
+      upM(function () {
+        return preview;
+      });
+      setPreview(null);
+      alert("\u2713 ".concat(preview.length, " art\xEDculos importados"));
+    }
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "check",
     size: 14
-  }), " Confirmar importaci\xF3n"), /*#__PURE__*/React.createElement("button", {
+  }), " Confirmar"), /*#__PURE__*/React.createElement("button", {
     style: s.btng,
     onClick: function onClick() {
       return setPreview(null);
@@ -1505,21 +1869,21 @@ function MappingTab(_ref7) {
   }), " Cancelar"))), /*#__PURE__*/React.createElement(SBar, {
     value: search,
     onChange: setSearch,
-    placeholder: "Buscar c\xF3digo\u2026"
-  }), mapping.length === 0 && !preview && /*#__PURE__*/React.createElement("div", {
-    style: s.hint
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "link",
-    size: 14
-  }), "\xA0Sin correspondencias todav\xEDa.", /*#__PURE__*/React.createElement("br", null), "Descarga la plantilla o importa directamente el Excel de Italia.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("code", {
-    style: s.hintCode
-  }, "codigo \xB7 codigo_larome \xB7 nombre \xB7 unidades_caja")), /*#__PURE__*/React.createElement("div", {
+    placeholder: "Buscar\u2026"
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: MUTED,
       textAlign: "right"
     }
-  }, mapping.length > 0 && "".concat(filtered.length, " de ").concat(mapping.length, " art\xEDculos")), filtered.map(function (m, i) {
+  }, mapping.length > 0 && "".concat(filtered.length, " / ").concat(mapping.length)), mapping.length === 0 && !preview && /*#__PURE__*/React.createElement("div", {
+    style: s.hint
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "link",
+    size: 14
+  }), "\xA0Sin correspondencias. Importa el Excel de art\xEDculos.", /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("code", {
+    style: s.hintCode
+  }, "codigo \xB7 codigo_larome \xB7 nombre \xB7 unidades_caja \xB7 precio")), filtered.map(function (m, i) {
     return /*#__PURE__*/React.createElement("div", {
       key: i,
       style: s.mapRow
@@ -1540,7 +1904,11 @@ function MappingTab(_ref7) {
       }
     }, m.name), m.unitsPerBox > 0 && /*#__PURE__*/React.createElement("span", {
       style: s.boxB
-    }, m.unitsPerBox, "/cj"), /*#__PURE__*/React.createElement("button", {
+    }, m.unitsPerBox, "/cj"), m.precio > 0 && /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, s.boxB), {}, {
+        color: GREEN
+      })
+    }, "\u20AC", m.precio), /*#__PURE__*/React.createElement("button", {
       style: _objectSpread(_objectSpread({}, s.btnd), {}, {
         padding: 4
       }),
@@ -1561,11 +1929,11 @@ function MappingTab(_ref7) {
 }
 var AMBER = "#f59e0b",
   TEAL = "#2dd4bf",
-  DARK = "#0d1b2a",
-  CARD = "#132233",
-  BORDER = "#1e3448",
-  TEXT = "#e2eaf4",
-  MUTED = "#6b8099",
+  DARK = "#060f18",
+  CARD = "#0e1e2e",
+  BORDER = "#2a4a6a",
+  TEXT = "#f0f6ff",
+  MUTED = "#8fb0d0",
   DANGER = "#ef4444",
   GREEN = "#22c55e";
 var s = {
@@ -1696,10 +2064,26 @@ var s = {
     flexDirection: "column",
     gap: 10
   },
+  lineCard: {
+    background: CARD,
+    border: "1px solid ".concat(BORDER),
+    borderRadius: 12,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8
+  },
+  lineCardDone: {
+    border: "1px solid ".concat(GREEN, "44"),
+    background: "#0d1f10"
+  },
   cTitle: {
     fontWeight: 700,
     fontSize: 14,
-    color: AMBER
+    color: AMBER,
+    display: "flex",
+    alignItems: "center",
+    gap: 6
   },
   secLabel: {
     fontWeight: 600,
@@ -1782,51 +2166,10 @@ var s = {
     cursor: "pointer",
     whiteSpace: "nowrap"
   },
-  listItem: {
+  lineHead: {
     display: "flex",
     alignItems: "center",
-    gap: 12,
-    background: CARD,
-    border: "1px solid ".concat(BORDER),
-    borderRadius: 10,
-    padding: "12px 14px"
-  },
-  lib: {
-    flex: 1,
-    minWidth: 0
-  },
-  lit: {
-    fontWeight: 600,
-    fontSize: 14,
-    color: TEXT,
-    marginBottom: 2
-  },
-  lis: {
-    fontSize: 12,
-    color: MUTED
-  },
-  lotB: {
-    background: "#1a3a4a",
-    border: "1px solid ".concat(TEAL),
-    color: TEAL,
-    borderRadius: 6,
-    padding: "4px 10px",
-    fontWeight: 700,
-    fontSize: 13,
-    fontVariantNumeric: "tabular-nums",
-    whiteSpace: "nowrap",
-    flexShrink: 0
-  },
-  lotBsm: {
-    background: "#1a3a4a",
-    border: "1px solid ".concat(TEAL),
-    color: TEAL,
-    borderRadius: 4,
-    padding: "2px 7px",
-    fontWeight: 700,
-    fontSize: 11,
-    fontVariantNumeric: "tabular-nums",
-    whiteSpace: "nowrap"
+    gap: 8
   },
   extB: {
     background: "#1a2030",
@@ -1839,6 +2182,28 @@ var s = {
     fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
     flexShrink: 0
+  },
+  lotBsm: {
+    background: "#1a3a4a",
+    border: "1px solid ".concat(TEAL),
+    color: TEAL,
+    borderRadius: 4,
+    padding: "2px 7px",
+    fontWeight: 700,
+    fontSize: 11,
+    whiteSpace: "nowrap"
+  },
+  boxBadge: {
+    background: "#1a2a1a",
+    border: "1px solid #22c55e33",
+    color: GREEN,
+    borderRadius: 4,
+    padding: "1px 6px",
+    fontWeight: 600,
+    fontSize: 11,
+    display: "flex",
+    alignItems: "center",
+    gap: 3
   },
   boxB: {
     background: "#1a2a3a",
@@ -1858,20 +2223,53 @@ var s = {
     fontSize: 12,
     fontWeight: 600
   },
-  chipOk: {
-    background: "#0d2218",
-    color: GREEN,
-    border: "1px solid #22c55e33"
-  },
   chipWarn: {
     background: "#2a0d0d",
     color: DANGER,
     border: "1px solid #ef444433"
   },
-  lineHead: {
+  sugBtn: {
+    background: "#1a3a2a",
+    border: "1px solid ".concat(GREEN, "44"),
+    color: GREEN,
+    borderRadius: 6,
+    padding: "3px 10px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  progressBar: {
+    height: 4,
+    background: "#1e3448",
+    borderRadius: 4,
+    overflow: "hidden"
+  },
+  progressFill: {
+    height: "100%",
+    background: GREEN,
+    borderRadius: 4,
+    transition: "width 0.3s"
+  },
+  summaryCard: {
+    background: "#0d1f10",
+    border: "1px solid ".concat(GREEN, "44"),
+    borderRadius: 12,
+    padding: 16,
     display: "flex",
+    flexDirection: "column",
+    gap: 8
+  },
+  summaryRow: {
+    display: "flex",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 10
+    fontSize: 13,
+    color: MUTED
+  },
+  summaryVal: {
+    fontWeight: 700,
+    color: GREEN,
+    fontSize: 14
   },
   mapRow: {
     display: "flex",
@@ -1881,6 +2279,28 @@ var s = {
     border: "1px solid ".concat(BORDER),
     borderRadius: 8,
     padding: "10px 14px"
+  },
+  dropdown: {
+    position: "absolute",
+    top: "calc(100% + 4px)",
+    left: 0,
+    right: 0,
+    background: CARD,
+    border: "1px solid ".concat(BORDER),
+    borderRadius: 10,
+    zIndex: 100,
+    overflow: "hidden",
+    boxShadow: "0 8px 24px #00000060"
+  },
+  dropItem: {
+    display: "flex",
+    alignItems: "center",
+    padding: "10px 14px",
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    textAlign: "left"
   },
   empty: {
     textAlign: "center",
