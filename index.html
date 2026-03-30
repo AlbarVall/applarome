@@ -401,7 +401,11 @@ var boxError = function boxError(upb, qty) {
   if (n <= 0) return null;
   if (n % upb !== 0) {
     var p = Math.floor(n / upb) * upb;
-    return "M\xFAltiplo de ".concat(upb, "/caja \u2014 \xBF").concat(p > 0 ? p + " o " : "").concat(p + upb, "?");
+    var suggestions = p > 0 ? [p, p + upb] : [p + upb];
+    return {
+      msg: "M\xFAltiplo de ".concat(upb, "/caja"),
+      suggestions: suggestions
+    };
   }
   return null;
 };
@@ -896,14 +900,38 @@ function OrdersTab(_ref5) {
     setPending([]);
   };
   var exportCRM = function exportCRM(order) {
-    var rows = order.lines.map(function (l) {
-      var _getLot;
-      return {
-        CODIGO: l.externalCode,
-        CODIGO_LAROME: l.laromCode || "",
-        CANTIDAD: l.qty,
-        LOTE: ((_getLot = getLot(l.lotId)) === null || _getLot === void 0 ? void 0 : _getLot.lot) || ""
-      };
+    var rows = [];
+    order.lines.forEach(function (l) {
+      var m = getMap(l.externalCode);
+      var precio = (m === null || m === void 0 ? void 0 : m.precio) || 0;
+      var assignments = l.lotAssignments && l.lotAssignments.length > 0 ? l.lotAssignments : [{
+        lotId: l.lotId,
+        qty: l.qty
+      }];
+      if (isVenta(l.externalCode) && assignments.filter(function (a) {
+        return a.lotId;
+      }).length > 0) {
+        assignments.filter(function (a) {
+          return a.lotId;
+        }).forEach(function (a) {
+          var _getLot;
+          rows.push({
+            "CODIGO LAROME": l.laromCode || "",
+            "CANTIDAD": Number(a.qty) || l.qty,
+            "PRECIO": precio,
+            "LOTE": ((_getLot = getLot(a.lotId)) === null || _getLot === void 0 ? void 0 : _getLot.lot) || "",
+            "N/PEDIDO QUALIFARMA": order.ref || ""
+          });
+        });
+      } else {
+        rows.push({
+          "CODIGO LAROME": l.laromCode || "",
+          "CANTIDAD": l.qty,
+          "PRECIO": precio,
+          "LOTE": "",
+          "N/PEDIDO QUALIFARMA": order.ref || ""
+        });
+      }
     });
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Pedido");
@@ -1038,11 +1066,28 @@ function OrdersTab(_ref5) {
         flexShrink: 0
       }
     }, line.qty, " uds")), bErr && /*#__PURE__*/React.createElement("div", {
-      style: _objectSpread(_objectSpread({}, s.chip), s.chipWarn)
+      style: _objectSpread(_objectSpread(_objectSpread({}, s.chip), s.chipWarn), {}, {
+        flexWrap: "wrap",
+        gap: 6
+      })
     }, /*#__PURE__*/React.createElement(Icon, {
       name: "alert",
       size: 12
-    }), bErr), /*#__PURE__*/React.createElement("select", {
+    }), /*#__PURE__*/React.createElement("span", null, bErr.msg), bErr.suggestions.map(function (sug) {
+      return /*#__PURE__*/React.createElement("button", {
+        key: sug,
+        style: s.sugBtn,
+        onClick: function onClick() {
+          return setPending(function (ls) {
+            return ls.map(function (x) {
+              return x.id === line.id ? _objectSpread(_objectSpread({}, x), {}, {
+                qty: sug
+              }) : x;
+            });
+          });
+        }
+      }, sug, " uds");
+    })), /*#__PURE__*/React.createElement("select", {
       style: s.inpsm,
       value: line.lotId,
       onChange: function onChange(e) {
@@ -1103,6 +1148,16 @@ function OrdersTab(_ref5) {
       }
     }, line.qty, " uds")));
   })), /*#__PURE__*/React.createElement("div", {
+    style: s.secLabel
+  }, "A\xF1adir l\xEDnea manual"), /*#__PURE__*/React.createElement(ManualLineAdder, {
+    mapping: mapping,
+    lots: lots,
+    onAdd: function onAdd(line) {
+      return setPending(function (ls) {
+        return [].concat(_toConsumableArray(ls), [line]);
+      });
+    }
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -1126,41 +1181,274 @@ function OrdersTab(_ref5) {
   }), " Cancelar")));
 }
 
-// ─── Order card con edición de lote inline ────────────────────────────────────
-function OrderCard(_ref6) {
-  var order = _ref6.order,
-    getLot = _ref6.getLot,
-    removeOrder = _ref6.removeOrder,
-    exportCRM = _ref6.exportCRM,
+// ─── Manual line adder ────────────────────────────────────────────────────────
+function ManualLineAdder(_ref6) {
+  var mapping = _ref6.mapping,
     lots = _ref6.lots,
-    upO = _ref6.upO;
+    onAdd = _ref6.onAdd;
   var _useState23 = useState(false),
     _useState24 = _slicedToArray(_useState23, 2),
     open = _useState24[0],
     setOpen = _useState24[1];
-  var _useState25 = useState(false),
+  var _useState25 = useState(""),
     _useState26 = _slicedToArray(_useState25, 2),
-    editing = _useState26[0],
-    setEditing = _useState26[1];
-  var _useState27 = useState(order.lines),
+    q = _useState26[0],
+    setQ = _useState26[1];
+  var _useState27 = useState(null),
     _useState28 = _slicedToArray(_useState27, 2),
-    lines = _useState28[0],
-    setLines = _useState28[1];
+    selected = _useState28[0],
+    setSel = _useState28[1];
+  var _useState29 = useState(""),
+    _useState30 = _slicedToArray(_useState29, 2),
+    qty = _useState30[0],
+    setQty = _useState30[1];
+  var results = mapping.filter(function (m) {
+    return !q || (m.name || "").toLowerCase().includes(q.toLowerCase()) || m.laromCode.includes(q) || m.externalCode.includes(q);
+  }).slice(0, 6);
+  var add = function add() {
+    if (!selected || !qty) return;
+    onAdd({
+      id: uid(),
+      externalCode: selected.externalCode,
+      nameOrig: selected.name,
+      qty: Number(qty),
+      lotId: "",
+      laromCode: selected.laromCode,
+      name: selected.name,
+      lotAssignments: []
+    });
+    setQ("");
+    setSel(null);
+    setQty("");
+    setOpen(false);
+  };
+  if (!open) return /*#__PURE__*/React.createElement("button", {
+    style: _objectSpread(_objectSpread({}, s.btng), {}, {
+      width: "100%",
+      justifyContent: "center"
+    }),
+    onClick: function onClick() {
+      return setOpen(true);
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "plus",
+    size: 14
+  }), " A\xF1adir l\xEDnea manual");
+  return /*#__PURE__*/React.createElement("div", {
+    style: s.card
+  }, /*#__PURE__*/React.createElement("div", {
+    style: s.cTitle
+  }, "Nueva l\xEDnea"), !selected ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+    style: s.inp,
+    placeholder: "Buscar producto (nombre o c\xF3digo)\u2026",
+    value: q,
+    autoFocus: true,
+    onChange: function onChange(e) {
+      return setQ(e.target.value);
+    }
+  }), q && results.map(function (m, i) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: i,
+      style: s.dropItem,
+      onClick: function onClick() {
+        setSel(m);
+        setQ("");
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        color: TEXT
+      }
+    }, m.name), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: AMBER,
+        fontSize: 12,
+        marginLeft: 8
+      }
+    }, m.laromCode), /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: MUTED,
+        fontSize: 12,
+        marginLeft: 8
+      }
+    }, m.externalCode));
+  }), q && results.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: MUTED
+    }
+  }, "Sin resultados")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: s.lineHead
+  }, /*#__PURE__*/React.createElement("span", {
+    style: s.extB
+  }, selected.externalCode), /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      fontWeight: 700,
+      color: TEXT,
+      fontSize: 13
+    }
+  }, selected.name), /*#__PURE__*/React.createElement("button", {
+    style: _objectSpread(_objectSpread({}, s.btnd), {}, {
+      padding: 4
+    }),
+    onClick: function onClick() {
+      return setSel(null);
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "x",
+    size: 13
+  }))), /*#__PURE__*/React.createElement("input", {
+    style: s.inp,
+    type: "number",
+    placeholder: "Cantidad (uds.)",
+    value: qty,
+    autoFocus: true,
+    onChange: function onChange(e) {
+      return setQty(e.target.value);
+    },
+    onKeyDown: function onKeyDown(e) {
+      return e.key === "Enter" && add();
+    }
+  }), selected.unitsPerBox && qty && boxError(selected.unitsPerBox, qty) && function () {
+    var err = boxError(selected.unitsPerBox, qty);
+    return /*#__PURE__*/React.createElement("div", {
+      style: _objectSpread(_objectSpread(_objectSpread({}, s.chip), s.chipWarn), {}, {
+        flexWrap: "wrap",
+        gap: 6
+      })
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "alert",
+      size: 12
+    }), /*#__PURE__*/React.createElement("span", null, err.msg), err.suggestions.map(function (sug) {
+      return /*#__PURE__*/React.createElement("button", {
+        key: sug,
+        style: s.sugBtn,
+        onClick: function onClick() {
+          return setQty(String(sug));
+        }
+      }, sug, " uds");
+    }));
+  }()), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: s.btnp,
+    onClick: add,
+    disabled: !selected || !qty
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "check",
+    size: 14
+  }), " A\xF1adir"), /*#__PURE__*/React.createElement("button", {
+    style: s.btng,
+    onClick: function onClick() {
+      setOpen(false);
+      setQ("");
+      setSel(null);
+      setQty("");
+    }
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "x",
+    size: 14
+  }), " Cancelar")));
+}
+
+// ─── Order card con múltiples lotes por línea ───────────────────────────────
+function OrderCard(_ref7) {
+  var order = _ref7.order,
+    getLot = _ref7.getLot,
+    removeOrder = _ref7.removeOrder,
+    exportCRM = _ref7.exportCRM,
+    lots = _ref7.lots,
+    upO = _ref7.upO;
+  var _useState31 = useState(false),
+    _useState32 = _slicedToArray(_useState31, 2),
+    open = _useState32[0],
+    setOpen = _useState32[1];
+  var _useState33 = useState(false),
+    _useState34 = _slicedToArray(_useState33, 2),
+    editing = _useState34[0],
+    setEditing = _useState34[1];
+  // lines with lotAssignments: [{lotId, qty}]
+  var _useState35 = useState(function () {
+      return order.lines.map(function (l) {
+        return _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments || (l.lotId ? [{
+            lotId: l.lotId,
+            qty: l.qty
+          }] : [])
+        });
+      });
+    }),
+    _useState36 = _slicedToArray(_useState35, 2),
+    lines = _useState36[0],
+    setLines = _useState36[1];
   var ventaLines = order.lines.filter(function (l) {
     return isVenta(l.externalCode);
   });
   var sinLote = ventaLines.filter(function (l) {
-    return !l.lotId;
+    return !l.lotId && !(l.lotAssignments && l.lotAssignments.length > 0);
   }).length;
+  var addAssignment = function addAssignment(lineIdx) {
+    setLines(function (ls) {
+      return ls.map(function (l, i) {
+        return i === lineIdx ? _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: [].concat(_toConsumableArray(l.lotAssignments), [{
+            lotId: "",
+            qty: ""
+          }])
+        }) : l;
+      });
+    });
+  };
+  var removeAssignment = function removeAssignment(lineIdx, aIdx) {
+    setLines(function (ls) {
+      return ls.map(function (l, i) {
+        return i === lineIdx ? _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments.filter(function (_, j) {
+            return j !== aIdx;
+          })
+        }) : l;
+      });
+    });
+  };
+  var updateAssignment = function updateAssignment(lineIdx, aIdx, field, value) {
+    setLines(function (ls) {
+      return ls.map(function (l, i) {
+        return i === lineIdx ? _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments.map(function (a, j) {
+            return j === aIdx ? _objectSpread(_objectSpread({}, a), {}, _defineProperty({}, field, value)) : a;
+          })
+        }) : l;
+      });
+    });
+  };
   var saveLines = function saveLines() {
+    // Flatten: keep lotId as first assignment for backward compat, store all in lotAssignments
+    var saved = lines.map(function (l) {
+      var _l$lotAssignments;
+      return _objectSpread(_objectSpread({}, l), {}, {
+        lotId: ((_l$lotAssignments = l.lotAssignments) === null || _l$lotAssignments === void 0 || (_l$lotAssignments = _l$lotAssignments[0]) === null || _l$lotAssignments === void 0 ? void 0 : _l$lotAssignments.lotId) || null,
+        lotAssignments: l.lotAssignments.filter(function (a) {
+          return a.lotId;
+        })
+      });
+    });
     upO(function (orders) {
       return orders.map(function (o) {
         return o.id === order.id ? _objectSpread(_objectSpread({}, o), {}, {
-          lines: lines
+          lines: saved
         }) : o;
       });
     });
     setEditing(false);
+  };
+  var totalAssigned = function totalAssigned(line) {
+    return line.lotAssignments.reduce(function (a, x) {
+      return a + (Number(x.qty) || 0);
+    }, 0);
   };
   return /*#__PURE__*/React.createElement("div", {
     style: s.card
@@ -1239,24 +1527,25 @@ function OrderCard(_ref6) {
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 8,
+      gap: 10,
       marginTop: 4
     }
   }, lines.map(function (l, i) {
-    var lot = getLot(l.lotId);
     var venta = isVenta(l.externalCode);
+    var total = totalAssigned(l);
+    var remaining = l.qty - total;
     return /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
         borderTop: "1px solid ".concat(BORDER),
-        paddingTop: 8
+        paddingTop: 10
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        marginBottom: editing && venta ? 6 : 0
+        marginBottom: 6
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: _objectSpread(_objectSpread({}, s.extB), {}, {
@@ -1279,33 +1568,97 @@ function OrderCard(_ref6) {
         fontWeight: 700,
         fontSize: 13
       }
-    }, l.qty, " uds"), venta && !editing && (lot ? /*#__PURE__*/React.createElement("span", {
-      style: s.lotBsm
-    }, lot.lot) : /*#__PURE__*/React.createElement("span", {
+    }, l.qty, " uds")), venta && editing && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        marginTop: 4
+      }
+    }, l.lotAssignments.map(function (a, j) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: j,
+        style: {
+          display: "flex",
+          gap: 6,
+          alignItems: "center"
+        }
+      }, /*#__PURE__*/React.createElement("select", {
+        style: _objectSpread(_objectSpread({}, s.inpsm), {}, {
+          flex: 2
+        }),
+        value: a.lotId,
+        onChange: function onChange(e) {
+          return updateAssignment(i, j, "lotId", e.target.value);
+        }
+      }, /*#__PURE__*/React.createElement("option", {
+        value: ""
+      }, "\u2014 Lote \u2014"), lots.map(function (lt) {
+        return /*#__PURE__*/React.createElement("option", {
+          key: lt.id,
+          value: lt.id
+        }, "Lote ", lt.lot);
+      })), /*#__PURE__*/React.createElement("input", {
+        style: _objectSpread(_objectSpread({}, s.inpsm), {}, {
+          flex: 1
+        }),
+        type: "number",
+        min: "1",
+        placeholder: "Uds",
+        value: a.qty,
+        onChange: function onChange(e) {
+          return updateAssignment(i, j, "qty", e.target.value);
+        }
+      }), /*#__PURE__*/React.createElement("button", {
+        style: _objectSpread(_objectSpread({}, s.btnd), {}, {
+          padding: 4
+        }),
+        onClick: function onClick() {
+          return removeAssignment(i, j);
+        }
+      }, /*#__PURE__*/React.createElement(Icon, {
+        name: "x",
+        size: 13
+      })));
+    }), l.lotAssignments.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: remaining === 0 ? GREEN : remaining < 0 ? DANGER : AMBER,
+        fontWeight: 600
+      }
+    }, remaining === 0 ? "✓ Completo" : "Faltan ".concat(remaining, " uds por asignar"), remaining < 0 ? " (".concat(Math.abs(remaining), " de m\xE1s)") : ""), /*#__PURE__*/React.createElement("button", {
+      style: _objectSpread(_objectSpread({}, s.btng), {}, {
+        fontSize: 12,
+        padding: "5px 10px",
+        alignSelf: "flex-start"
+      }),
+      onClick: function onClick() {
+        return addAssignment(i);
+      }
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "plus",
+      size: 13
+    }), " A\xF1adir lote")), venta && !editing && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6,
+        flexWrap: "wrap",
+        marginTop: 2
+      }
+    }, l.lotAssignments && l.lotAssignments.length > 0 ? l.lotAssignments.map(function (a, j) {
+      var lt = getLot(a.lotId);
+      return lt ? /*#__PURE__*/React.createElement("span", {
+        key: j,
+        style: _objectSpread(_objectSpread({}, s.lotBsm), {}, {
+          fontSize: 11
+        })
+      }, lt.lot, a.qty ? " \xB7 ".concat(a.qty, " uds") : "") : null;
+    }) : /*#__PURE__*/React.createElement("span", {
       style: {
         color: AMBER,
         fontSize: 11
       }
-    }, "sin lote"))), editing && venta && /*#__PURE__*/React.createElement("select", {
-      style: s.inpsm,
-      value: l.lotId || "",
-      onChange: function onChange(e) {
-        return setLines(function (ls) {
-          return ls.map(function (x, j) {
-            return j === i ? _objectSpread(_objectSpread({}, x), {}, {
-              lotId: e.target.value
-            }) : x;
-          });
-        });
-      }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: ""
-    }, "\u2014 Sin lote \u2014"), lots.map(function (lt) {
-      return /*#__PURE__*/React.createElement("option", {
-        key: lt.id,
-        value: lt.id
-      }, "Lote ", lt.lot, " \xB7 ", lt.qty, " uds \xB7 ", lt.date);
-    })));
+    }, "sin lote")));
   }), editing && /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -1321,7 +1674,11 @@ function OrderCard(_ref6) {
   }), " Guardar"), /*#__PURE__*/React.createElement("button", {
     style: s.btng,
     onClick: function onClick() {
-      setLines(order.lines);
+      setLines(order.lines.map(function (l) {
+        return _objectSpread(_objectSpread({}, l), {}, {
+          lotAssignments: l.lotAssignments || []
+        });
+      }));
       setEditing(false);
     }
   }, /*#__PURE__*/React.createElement(Icon, {
@@ -1331,17 +1688,17 @@ function OrderCard(_ref6) {
 }
 
 // ─── MAPPING TAB ─────────────────────────────────────────────────────────────
-function MappingTab(_ref7) {
-  var mapping = _ref7.mapping,
-    upM = _ref7.upM;
-  var _useState29 = useState(""),
-    _useState30 = _slicedToArray(_useState29, 2),
-    search = _useState30[0],
-    setSearch = _useState30[1];
-  var _useState31 = useState(null),
-    _useState32 = _slicedToArray(_useState31, 2),
-    preview = _useState32[0],
-    setPreview = _useState32[1];
+function MappingTab(_ref8) {
+  var mapping = _ref8.mapping,
+    upM = _ref8.upM;
+  var _useState37 = useState(""),
+    _useState38 = _slicedToArray(_useState37, 2),
+    search = _useState38[0],
+    setSearch = _useState38[1];
+  var _useState39 = useState(null),
+    _useState40 = _slicedToArray(_useState39, 2),
+    preview = _useState40[0],
+    setPreview = _useState40[1];
   var readExcel = function readExcel(file, cb) {
     var reader = new FileReader();
     reader.onload = function (evt) {
@@ -1374,7 +1731,8 @@ function MappingTab(_ref7) {
           externalCode: (r.codigo || r.codigoqualifarma || r.codice || r.codigoexterno || "").toString().trim(),
           laromCode: (r.codigolarome || r.larome || r.codlarome || r.codigointerno || r.codlarome || "").toString().trim(),
           name: (r.nombre || r.name || r.descrizione || r.descripcion || r.nombreCorto || "").trim(),
-          unitsPerBox: Number(r.unidadescaja || r.udscaja || r.unidadesxcaja || r.unidcaja || 0) || 0
+          unitsPerBox: Number(r.unidadescaja || r.udscaja || r.unidadesxcaja || r.unidcaja || 0) || 0,
+          precio: Number(r.precio || r.price || r.pvp || 0) || 0
         };
       }).filter(function (r) {
         return r.externalCode && r.laromCode && r.laromCode !== "xxxxxx";
@@ -1540,7 +1898,11 @@ function MappingTab(_ref7) {
       }
     }, m.name), m.unitsPerBox > 0 && /*#__PURE__*/React.createElement("span", {
       style: s.boxB
-    }, m.unitsPerBox, "/cj"), /*#__PURE__*/React.createElement("button", {
+    }, m.unitsPerBox, "/cj"), m.precio > 0 && /*#__PURE__*/React.createElement("span", {
+      style: _objectSpread(_objectSpread({}, s.boxB), {}, {
+        color: GREEN
+      })
+    }, "\u20AC", m.precio), /*#__PURE__*/React.createElement("button", {
       style: _objectSpread(_objectSpread({}, s.btnd), {}, {
         padding: 4
       }),
@@ -1887,6 +2249,27 @@ var s = {
     color: MUTED,
     padding: "32px 0",
     fontSize: 14
+  },
+  sugBtn: {
+    background: "#1a3a2a",
+    border: "1px solid ".concat(GREEN, "44"),
+    color: GREEN,
+    borderRadius: 6,
+    padding: "3px 10px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  dropItem: {
+    display: "flex",
+    alignItems: "center",
+    background: "#0a1520",
+    border: "1px solid ".concat(BORDER),
+    borderRadius: 8,
+    padding: "8px 12px",
+    cursor: "pointer",
+    width: "100%",
+    textAlign: "left"
   },
   warn: {
     display: "flex",
